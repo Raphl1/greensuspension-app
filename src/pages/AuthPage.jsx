@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { createUserWithEmailAndPassword, signInWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth';
+import { createUserWithEmailAndPassword, signInWithEmailAndPassword, sendPasswordResetEmail, signInAnonymously } from 'firebase/auth';
 import { auth, db } from '../firebase';
 import { doc, setDoc } from 'firebase/firestore';
 import GradientButton from '../components/GradientButton';
@@ -7,8 +7,6 @@ import Impressum from './Impressum';
 import Datenschutz from './Datenschutz';
 import { X, Mail, KeyRound } from 'lucide-react';
 
-// Das Formular ist jetzt eine eigene Komponente außerhalb der Hauptlogik.
-// Das verhindert, dass es bei jeder Eingabe neu erstellt wird, was das Fokus-Problem behebt.
 const AuthForm = ({ title, buttonText, onSubmit, children, email, onEmailChange, password, onPasswordChange, showPasswordField = true, message, error }) => (
     <div className="bg-neutral-900/50 border border-neutral-800 rounded-xl p-8 backdrop-blur-sm">
         <h2 className="text-2xl font-bold text-center text-white mb-8">{title}</h2>
@@ -33,7 +31,7 @@ const AuthForm = ({ title, buttonText, onSubmit, children, email, onEmailChange,
 
 
 const AuthPage = () => {
-  const [pageState, setPageState] = useState('login'); // login, register, reset, impressum, datenschutz
+  const [pageState, setPageState] = useState('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -50,14 +48,13 @@ const AuthPage = () => {
     try {
       if (pageState === 'login') {
         await signInWithEmailAndPassword(auth, email, password);
-      } else { // register
+      } else {
         const userCredential = await createUserWithEmailAndPassword(auth, email, password);
         const user = userCredential.user;
-        // Erstellt ein initiales, leeres Profil für neue Nutzer
         const userDocRef = doc(db, 'artifacts', appId, 'users', user.uid);
         await setDoc(userDocRef, {
-            name: email.split('@')[0], // Standardname
-            email: user.email, // E-Mail speichern
+            name: email.split('@')[0],
+            email: user.email,
             company: '',
             position: '',
             fleetInfo: '',
@@ -65,7 +62,6 @@ const AuthPage = () => {
         });
       }
     } catch (err) {
-      // Bessere Fehlerbehandlung
       switch (err.code) {
         case 'auth/email-already-in-use': setError('Diese E-Mail-Adresse wird bereits verwendet.'); break;
         case 'auth/invalid-email': setError('Dies ist keine gültige E-Mail-Adresse.'); break;
@@ -89,11 +85,36 @@ const AuthPage = () => {
     }
   };
   
+  const handleGuestLogin = async () => {
+    setError('');
+    setMessage('');
+    try {
+        const userCredential = await signInAnonymously(auth);
+        const user = userCredential.user;
+        // Erstellt ein Standardprofil für den Gast, falls noch keins existiert
+        const userDocRef = doc(db, 'artifacts', appId, 'users', user.uid);
+        await setDoc(userDocRef, {
+            name: 'Test-Nutzer',
+            email: 'gast@greensuspension.app',
+            company: 'Demo-Firma',
+            position: 'Testfahrer',
+            fleetInfo: 'Test-Flotte',
+            photoURL: ''
+        }, { merge: true }); // merge:true verhindert das Überschreiben, falls schon Daten da sind
+    } catch (error) {
+        console.error("Gast-Login Fehler:", error);
+        setError("Der Gast-Login ist fehlgeschlagen.");
+    }
+  };
+  
   return (
     <div className="min-h-screen bg-black flex flex-col items-center justify-center p-4">
       {showDisclaimer && (
           <div className="w-full max-w-sm bg-amber-500/10 text-amber-300 text-xs text-center p-2 relative border border-amber-500/20 rounded-lg mb-4">
-            Dies ist eine Demo-Version zu Testzwecken.
+            Dies ist eine Demo-Version.{" "}
+            <button onClick={handleGuestLogin} className="underline hover:text-white font-bold">
+                Als Gast fortfahren.
+            </button>
             <button onClick={() => setShowDisclaimer(false)} className="absolute top-1/2 right-2 -translate-y-1/2 text-amber-400 hover:text-white"><X size={16} /></button>
           </div>
         )}
